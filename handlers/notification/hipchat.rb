@@ -45,19 +45,6 @@ class HipChatNotif < Sensu::Handler
     end
   end
 
-  def status_to_string
-    case @event['check']['status']
-    when 0
-      'OK'
-    when 1
-      'WARNING'
-    when 2
-      'CRITICAL'
-    else
-      'UNKNOWN'
-    end
-  end
-
   def handle
     json_config = config[:json_config] || 'hipchat'
     server_url = settings[json_config]['server_url'] || 'https://api.hipchat.com'
@@ -89,9 +76,9 @@ class HipChatNotif < Sensu::Handler
     begin
       timeout(3) do
         if @event['action'].eql?('resolve')
-          hipchatmsg[room].send(from, "RESOLVED (#{status_to_string}) - #{notification} @ #{client_name}: #{output}", color: 'green')
+          hipchatmsg[room].send(from, "#{notification} @ #{client_name}: #{output}", color: 'green')
         else
-          hipchatmsg[room].send(from, "ALERT (#{status_to_string}) - #{notification} @ #{client_name}: #{output}", color: @event['check']['status'] == 1 ? 'yellow' : 'red', notify: true)
+          hipchatmsg[room].send(from, "#{notification} @ #{client_name}: #{output}", color: @event['check']['status'] == 1 ? 'yellow' : 'red', notify: true)
         end
       end
     rescue Timeout::Error
