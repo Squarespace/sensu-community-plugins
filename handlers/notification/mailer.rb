@@ -109,7 +109,7 @@ class Mailer < Sensu::Handler
     if @event['check']['notification'].nil?
       subject = "#{action_to_string} (#{status_to_string}) - #{short_name}"
     else
-      subject = "#{action_to_string} - #{short_name}: #{@event['check']['notification']}"
+      subject = "#{action_to_string} (#{status_to_string}) - #{@event['check']['notification']} @ #{@event['client']['name']}"
     end
 
     Mail.defaults do
