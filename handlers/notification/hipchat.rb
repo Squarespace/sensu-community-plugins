@@ -35,18 +35,26 @@ class HipChatNotif < Sensu::Handler
          long: '--json_config JsonConfig',
          required: false
 
-  def event_name
-    @event['check']['name'] + ' @ ' + @event['client']['name']
-  end
-
-  def get_message
+  def get_notification
     notification = @event['check']['notification']
-    output = @event['check']['output']
 
     if notification
-      "#{ notification }: #{ output }"
+      "#{notification}"
     else
-      output
+      ""
+    end
+  end
+
+  def status_to_string
+    case @event['check']['status']
+    when 0
+      'OK'
+    when 1
+      'WARNING'
+    when 2
+      'CRITICAL'
+    else
+      'UNKNOWN'
     end
   end
 
@@ -58,7 +66,10 @@ class HipChatNotif < Sensu::Handler
     hipchatmsg = HipChat::Client.new(settings[json_config]['apikey'], api_version: apiversion, http_proxy: proxy_url, server_url: server_url)
     room = @event['client']['hipchat_room'] || settings[json_config]['room']
     from = settings[json_config]['from'] || 'Sensu'
-    message = get_message
+
+    client_name = @event['client']['name']
+    notification = get_notification
+    output = @event['check']['output']
 
     # If the playbook attribute exists and is a URL, "[<a href='url'>playbook</a>]" will be output.
     # To control the link name, set the playbook value to the HTML output you would like.
@@ -66,21 +77,21 @@ class HipChatNotif < Sensu::Handler
       begin
         uri = URI.parse(@event['check']['playbook'])
         if %w( http https ).include?(uri.scheme)
-          message << "  [<a href='#{@event['check']['playbook']}'>Playbook</a>]"
+          output << "  [<a href='#{@event['check']['playbook']}'>Playbook</a>]"
         else
-          message << "  Playbook:  #{@event['check']['playbook']}"
+          output << "  Playbook:  #{@event['check']['playbook']}"
         end
       rescue
-        message << "  Playbook:  #{@event['check']['playbook']}"
+        output << "  Playbook:  #{@event['check']['playbook']}"
       end
     end
 
     begin
       timeout(3) do
         if @event['action'].eql?('resolve')
-          hipchatmsg[room].send(from, "#{event_name} - RESOLVED: #{message}", color: 'green')
+          hipchatmsg[room].send(from, "RESOLVED (#{status_to_string}) - #{notification} @ #{client_name}: #{output}", color: 'green')
         else
-          hipchatmsg[room].send(from, "#{event_name} - #{message}", color: @event['check']['status'] == 1 ? 'yellow' : 'red', notify: true)
+          hipchatmsg[room].send(from, "ALERT (#{status_to_string}) - #{notification} @ #{client_name}: #{output}", color: @event['check']['status'] == 1 ? 'yellow' : 'red', notify: true)
         end
       end
     rescue Timeout::Error
