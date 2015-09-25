@@ -77,6 +77,12 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
          long: '--critical VALUE',
          proc: proc(&:to_f)
 
+  option :nodes,
+         description: 'Number of nodes in warning and/or critical state must be >= this setting. Does not apply to graphs with a single metric/node',
+         short: '-o NODES',
+         long: '--nodes NODES',
+         proc: proc(&:to_i)
+
   option :reset_on_decrease,
          description: 'Send OK if value has decreased on any values within END-INTERVAL to END',
          short: '-r INTERVAL',
@@ -133,12 +139,24 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
       exit
     end
 
+    if config[:nodes] && config[:nodes] < 1
+      puts "ERROR: --nodes arg cannot be < 1"
+      exit
+    end
+
     data = retrieve_data
     puts "Data retrieved from graphite: #{ data }" if config[:debug]
+    @critical_count = @warning_count = 0
     data.each_pair do |_key, value|
       @value = value
       @data = value['data']
-      check(:critical) || check(:warning)
+      check(:critical, !config[:nodes]) || check(:warning, !config[:nodes])
+    end
+    if config[:nodes]
+      puts "critical = #{@critical_count}"
+      puts "warning = #{@warning_count}"
+      send(:critical, "#{@critical_count} nodes have passed critical threshold") if @critical_count >= config[:nodes]
+      send(:warning, "#{@warning_count} nodes have passed warning threshold") if @warning_count >= config[:nodes]
     end
     ok("#{name} value okay")
   end
@@ -216,11 +234,19 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
   end
 
   # type:: :warning or :critical
+  # alert:: boolean
   # Return alert if required
-  def check(type)
+  def check(type, alert)
     # #YELLOW
-    if config[type] # rubocop:disable GuardClause
-      send(type, "#{@value['target']} has passed #{type} threshold (#{@data.last})") if below?(type) || above?(type)
+    if config[type] && (below?(type) || above?(type)) # rubocop:disable GuardClause
+      if alert
+        send(type, "#{@value['target']} has passed #{type} threshold (#{@data.last})")
+      elsif type == "critical"
+        @critical_count += 1
+        @warning_count += 1
+      else
+        @warning_count += 1
+      end
     end
   end
 
