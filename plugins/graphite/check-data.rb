@@ -143,17 +143,18 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
 
     data = retrieve_data
     puts "Data retrieved from graphite: #{ data }" if config[:debug]
-    @critical_count = @warning_count = @ok_count = 0
+    @critical_count = @warning_count = ok_count = 0
+    @critical_out = []
+    @warning_out = []
     data.each_pair do |_key, value|
       @value = value
       @data = value['data']
-      check(:critical, !config[:nodes]) || check(:warning, !config[:nodes])
+      ok_count += 1 if !check?(:critical, !config[:nodes]) && !check?(:warning, !config[:nodes])
     end
     if config[:nodes]
-      send_msg = "critical: #{@critical_count}, warning: #{@warning_count}, ok: #{@ok_count}"
+      send_msg = "critical: #{@critical_count}, warning: #{@warning_count - @critical_count}, ok: #{ok_count}\ncritical: #{@critical_out.join(", ")}\nwarning: #{@warning_out.join(", ")}"
       send(:critical, send_msg) if @critical_count >= config[:nodes]
       send(:warning, send_msg) if @warning_count >= config[:nodes]
-      ok("#{name} value okay. " + send_msg)
     end
     ok("#{name} value okay")
   end
@@ -233,15 +234,21 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
   # type:: :warning or :critical
   # alert:: boolean
   # Return alert if required
-  def check(type, alert)
+  def check?(type, alert)
     # #YELLOW
     if config[type] # rubocop:disable GuardClause
       if below?(type) || above?(type)
-        send(type, "#{@value['target']} has passed #{type} threshold (#{@data.last})") if alert
-        @critical_count += 1 if type == "critical" 
+        output = "#{@value['target']} has passed #{type} threshold (#{@data.last})"
+        send(type, output) if alert
+        if type.to_s == "critical"
+          @critical_count += 1
+          @critical_out << output
+        else
+          @warning_out << output
+        end
         @warning_count += 1
       else
-        @ok_count += 1
+        false
       end
     end
   end
