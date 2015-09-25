@@ -139,24 +139,21 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
       exit
     end
 
-    if config[:nodes] && config[:nodes] < 1
-      puts "ERROR: --nodes arg cannot be < 1"
-      exit
-    end
+    unknown '--nodes arg cannot be < 1' if config[:nodes] && config[:nodes] < 1
 
     data = retrieve_data
     puts "Data retrieved from graphite: #{ data }" if config[:debug]
-    @critical_count = @warning_count = 0
+    @critical_count = @warning_count = @ok_count = 0
     data.each_pair do |_key, value|
       @value = value
       @data = value['data']
       check(:critical, !config[:nodes]) || check(:warning, !config[:nodes])
     end
     if config[:nodes]
-      puts "critical = #{@critical_count}"
-      puts "warning = #{@warning_count}"
-      send(:critical, "#{@critical_count} nodes have passed critical threshold") if @critical_count >= config[:nodes]
-      send(:warning, "#{@warning_count} nodes have passed warning threshold") if @warning_count >= config[:nodes]
+      send_msg = "critical: #{@critical_count}, warning: #{@warning_count}, ok: #{@ok_count}"
+      send(:critical, send_msg) if @critical_count >= config[:nodes]
+      send(:warning, send_msg) if @warning_count >= config[:nodes]
+      ok("#{name} value okay. " + send_msg)
     end
     ok("#{name} value okay")
   end
@@ -238,14 +235,13 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
   # Return alert if required
   def check(type, alert)
     # #YELLOW
-    if config[type] && (below?(type) || above?(type)) # rubocop:disable GuardClause
-      if alert
-        send(type, "#{@value['target']} has passed #{type} threshold (#{@data.last})")
-      elsif type == "critical"
-        @critical_count += 1
+    if config[type] # rubocop:disable GuardClause
+      if below?(type) || above?(type)
+        send(type, "#{@value['target']} has passed #{type} threshold (#{@data.last})") if alert
+        @critical_count += 1 if type == "critical" 
         @warning_count += 1
       else
-        @warning_count += 1
+        @ok_count += 1
       end
     end
   end
