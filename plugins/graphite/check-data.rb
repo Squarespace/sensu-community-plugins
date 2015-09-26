@@ -77,6 +77,12 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
          long: '--critical VALUE',
          proc: proc(&:to_f)
 
+  option :nodes,
+         description: 'Number of nodes in warning and/or critical state must be >= this setting. Does not apply to graphs with a single metric/node',
+         short: '-o NODES',
+         long: '--nodes NODES',
+         proc: proc(&:to_i)
+
   option :reset_on_decrease,
          description: 'Send OK if value has decreased on any values within END-INTERVAL to END',
          short: '-r INTERVAL',
@@ -133,12 +139,22 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
       exit
     end
 
+    unknown '--nodes arg cannot be < 1' if config[:nodes] && config[:nodes] < 1
+
     data = retrieve_data
     puts "Data retrieved from graphite: #{ data }" if config[:debug]
+    @critical_count = @warning_count = ok_count = 0
+    @critical_out = []
+    @warning_out = []
     data.each_pair do |_key, value|
       @value = value
       @data = value['data']
-      check(:critical) || check(:warning)
+      ok_count += 1 if !check?(:critical, !config[:nodes]) && !check?(:warning, !config[:nodes])
+    end
+    if config[:nodes]
+      send_msg = "critical: #{@critical_count}, warning: #{@warning_count - @critical_count}, ok: #{ok_count}\ncritical: #{@critical_out.join(", ")}\nwarning: #{@warning_out.join(", ")}"
+      send(:critical, send_msg) if @critical_count >= config[:nodes]
+      send(:warning, send_msg) if @warning_count >= config[:nodes]
     end
     ok("#{name} value okay")
   end
@@ -216,11 +232,24 @@ class CheckGraphiteData < Sensu::Plugin::Check::CLI
   end
 
   # type:: :warning or :critical
+  # alert:: boolean
   # Return alert if required
-  def check(type)
+  def check?(type, alert)
     # #YELLOW
     if config[type] # rubocop:disable GuardClause
-      send(type, "#{@value['target']} has passed #{type} threshold (#{@data.last})") if below?(type) || above?(type)
+      if below?(type) || above?(type)
+        output = "#{@value['target']} has passed #{type} threshold (#{@data.last})"
+        send(type, output) if alert
+        if type.to_s == "critical"
+          @critical_count += 1
+          @critical_out << output
+        else
+          @warning_out << output
+        end
+        @warning_count += 1
+      else
+        false
+      end
     end
   end
 
