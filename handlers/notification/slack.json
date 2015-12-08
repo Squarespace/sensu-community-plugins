@@ -7,6 +7,7 @@
     "bot_name": "optional bot name, defaults to slack defined",
     "proxy_addr": "optional - your proxy address for http proxy, like squid, i.e. 192.168.10.100",
     "proxy_port": "optional - should be port used by proxy, i.e. 3128",
-    "markdown_enabled": false
+    "markdown_enabled": false,
+    "sensu_server_url": "optional - used for linking check and client from the notification to your sensu server"
   }
 }
