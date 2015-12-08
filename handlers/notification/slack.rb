@@ -53,8 +53,12 @@ class Slack < Sensu::Handler
     get_setting('markdown_enabled') || true
   end
 
-  def incident_key
-    @event['client']['name'] + '/' + @event['check']['name']
+  def sensu_server_url
+    get_setting('sensu_server_url')
+  end
+
+  def client_name
+    @event['client']['name']
   end
 
   def get_setting(name)
@@ -62,19 +66,11 @@ class Slack < Sensu::Handler
   end
 
   def handle
-    description = @event['check']['notification'] || build_description
-    post_data("*Check*\n#{incident_key}\n\n*Description*\n#{description}")
+    post_data
   end
 
-  def build_description
-    [
-      @event['check']['output'].strip,
-      @event['client']['address'],
-      @event['client']['subscriptions'].join(',')
-    ].join(' : ')
-  end
+  def post_data
 
-  def post_data(notice)
     uri = URI(slack_webhook_url)
 
     if (defined?(slack_proxy_addr)).nil?
@@ -86,8 +82,7 @@ class Slack < Sensu::Handler
     http.use_ssl = true
 
     req = Net::HTTP::Post.new("#{uri.path}?#{uri.query}")
-    text = slack_surround ? slack_surround + notice + slack_surround : notice
-    req.body = payload(text).to_json
+    req.body = payload.to_json
 
     response = http.request(req)
     verify_response(response)
@@ -102,17 +97,39 @@ class Slack < Sensu::Handler
     end
   end
 
-  def payload(notice)
+  def payload
+    check_name = @event['check']['name']
+    check_notification = @event['check']['notification']
+    date_executed = @event['check']['executed']
+    check_result = @event['check']['output']
+    fallback_text = "#{check_notification} @ #{client_name} - #{date_executed}"
+    check_text = "#{fallback_text}"
+    check_result_value = "Result: #{check_result}"
+    markdown_fields = ["text", "fields"]
+    if (markdown_enabled)
+      check_text = "*<#{sensu_server_url}#/events?q=#{check_name}|#{check_notification}>* @ *<#{sensu_server_url}/#/clients?q=#{client_name}|#{client_name}>* - `#{date_executed}`"
+      check_result_value = "*Result*: `#{check_result}`"
+      if sensu_server_url.to_s.strip.length == 0
+        check_text = "*#{check_notification}* @ *#{client_name}* - `#{date_executed}`"
+      end
+    else
+      markdown_fields = []
+    end
     {
+      channel: slack_channel,
+      username: slack_bot_name,
       icon_url: 'http://sensuapp.org/img/sensu_logo_large-c92d73db.png',
       attachments: [{
-        text: [slack_message_prefix, notice].compact.join(' '),
-        color: color
+        fallback: fallback_text,
+        text: check_text,
+        color: color,
+        mrkdwn_in: markdown_fields,
+        fields: [{
+            value: check_result_value,
+            short: false
+          }]
       }]
     }.tap do |payload|
-      payload[:channel] = slack_channel if slack_channel
-      payload[:username] = slack_bot_name if slack_bot_name
-      payload[:attachments][0][:mrkdwn_in] = %w(text) if markdown_enabled
     end
   end
 
