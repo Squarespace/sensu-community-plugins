@@ -108,7 +108,7 @@ class Slack < Sensu::Handler
     markdown_fields = ["text", "fields"]
     if (markdown_enabled)
       check_text = "*<#{sensu_server_url}#/events?q=#{check_name}|#{check_notification}>* @ *<#{sensu_server_url}/#/clients?q=#{client_name}|#{client_name}>* - `#{date_executed}`"
-      check_result_value = "*Result*: `#{check_result}`"
+      check_result_value = "*Result*: `#{check_result.strip}`"
       if sensu_server_url.to_s.strip.length == 0
         check_text = "*#{check_notification}* @ *#{client_name}* - `#{date_executed}`"
       end
