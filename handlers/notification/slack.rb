@@ -101,7 +101,7 @@ class Slack < Sensu::Handler
     check_name = @event['check']['name']
     check_notification = @event['check']['notification']
     date_executed = @event['check']['executed']
-    check_result = @event['check']['output'].strip.split(/(\n)/)
+    check_result = @event['check']['output'].strip.gsub(/`/, '\'').split(/(\n)/)
     fallback_text = "#{check_notification} @ #{client_name} - #{date_executed}"
     check_text = "#{fallback_text}"
     check_result_value = "Result:"
