@@ -101,14 +101,34 @@ class Slack < Sensu::Handler
     check_name = @event['check']['name']
     check_notification = @event['check']['notification']
     date_executed = @event['check']['executed']
-    check_result = @event['check']['output']
+    check_result = @event['check']['output'].strip.split(/(\n)/)
     fallback_text = "#{check_notification} @ #{client_name} - #{date_executed}"
     check_text = "#{fallback_text}"
-    check_result_value = "Result: #{check_result}"
+    check_result_value = "Result:"
+    if check_result.length == 1
+      check_result_value = check_result_value + " " + check_result[0]
+    else
+      check_result.each do |line|
+        stripped = line.strip
+        if stripped.length > 0
+          check_result_value = check_result_value + "\n" + stripped
+        end
+      end
+    end
     markdown_fields = ["text", "fields"]
     if (markdown_enabled)
       check_text = "*<#{sensu_server_url}#/events?q=#{check_name}|#{check_notification}>* @ *<#{sensu_server_url}/#/clients?q=#{client_name}|#{client_name}>* - `#{date_executed}`"
-      check_result_value = "*Result*: `#{check_result}`"
+      check_result_value = "*Result*:"
+      if check_result.length == 1
+        check_result_value = check_result_value + " `" + check_result[0] + "`"
+      else
+        check_result.each do |line|
+          stripped = line.strip
+          if stripped.length > 0
+            check_result_value = check_result_value + "\n`" + stripped + "`"
+          end
+        end
+      end
       if sensu_server_url.to_s.strip.length == 0
         check_text = "*#{check_notification}* @ *#{client_name}* - `#{date_executed}`"
       end
