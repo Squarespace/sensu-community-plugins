@@ -100,9 +100,10 @@ class Slack < Sensu::Handler
   def payload
     check_name = @event['check']['name']
     check_notification = @event['check']['notification']
-    date_executed = @event['check']['executed']
+    date_executed = Time.at(@event['check']['executed'])
+    date_value = "#{date_executed.strftime("%Y-%m-%d %H:%M:%S %z")}"
     check_result = @event['check']['output'].strip.gsub(/`/, '\'').split(/(\n)/)
-    fallback_text = "#{check_notification} @ #{client_name} - #{date_executed}"
+    fallback_text = "#{check_notification} @ #{client_name} - #{date_value}"
     check_text = "#{fallback_text}"
     check_result_value = "Result:"
     if check_result.length == 1
@@ -117,7 +118,7 @@ class Slack < Sensu::Handler
     end
     markdown_fields = ["text", "fields"]
     if (markdown_enabled)
-      check_text = "*<#{sensu_server_url}#/events?q=#{check_name}|#{check_notification}>* @ *<#{sensu_server_url}/#/clients?q=#{client_name}|#{client_name}>* - `#{date_executed}`"
+      check_text = "*<#{sensu_server_url}#/events?q=#{check_name}|#{check_notification}>* @ *<#{sensu_server_url}/#/clients?q=#{client_name}|#{client_name}>* - `#{date_value}`"
       check_result_value = "*Result*:"
       if check_result.length == 1
         check_result_value = check_result_value + " `" + check_result[0] + "`"
@@ -130,7 +131,7 @@ class Slack < Sensu::Handler
         end
       end
       if sensu_server_url.to_s.strip.length == 0
-        check_text = "*#{check_notification}* @ *#{client_name}* - `#{date_executed}`"
+        check_text = "*#{check_notification}* @ *#{client_name}* - `#{date_value}`"
       end
     else
       markdown_fields = []
